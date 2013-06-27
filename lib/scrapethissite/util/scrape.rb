@@ -1,4 +1,6 @@
 module ScrapeThisSite
+module Util
+
   class Scrape
     attr_reader :url, :title, :html, :data, :mime, :name
 
@@ -11,4 +13,6 @@ module ScrapeThisSite
       @name  = args[:name]
     end
   end
+
+end
 end

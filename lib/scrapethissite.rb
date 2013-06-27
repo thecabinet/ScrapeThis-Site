@@ -1,3 +1,6 @@
-require 'scrapethissite/evernote'
-require 'scrapethissite/scrape'
-require 'scrapethissite/tsp'
+require 'scrapethissite/sources/tsp'
+
+require 'scrapethissite/sinks/evernote'
+
+require 'scrapethissite/util/scrape'
+

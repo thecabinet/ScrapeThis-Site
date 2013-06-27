@@ -2,6 +2,8 @@ require 'rubygems'
 require 'mechanize'
 
 module ScrapeThisSite
+module Sources
+
   class ThriftSavingsPlan
     def initialize(mech, args)
       @mech = mech
@@ -34,7 +36,7 @@ module ScrapeThisSite
         }
       }
     end
-    
+
     def statements
       return @statements.keys.clone
     end
@@ -42,7 +44,7 @@ module ScrapeThisSite
     def statement(stmt)
       @mech.transact { |mech|
         file = mech.current_page.link_with(:href => @statements[stmt]).click
-        return Scrape.new(
+        return ScrapeThisSite::Util::Scrape.new(
                    :url   => file.uri.to_s,
                    :title => "#{stmt} Statement",
                    :data  => file.body,
@@ -60,4 +62,6 @@ module ScrapeThisSite
       }
     end
   end
+
+end
 end

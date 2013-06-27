@@ -16,7 +16,7 @@ destinations = []
 config['destinations'].each { |c|
   case c['type']
     when 'Evernote'
-      destinations << ScrapeThisSite::Evernote::new(c['token'], c['host'])
+      destinations << ScrapeThisSite::Sinks::Evernote::new(c['token'], c['host'])
     else
       puts "unsupported destination: #{c['type']}"
   end
@@ -30,7 +30,7 @@ config['accounts'].each { |c|
   args = c['args'] || {}
   case c['type']
     when 'ThriftSavingsPlan'
-      @account = ScrapeThisSite::ThriftSavingsPlan.new(mech, args)
+      @account = ScrapeThisSite::Sources::ThriftSavingsPlan.new(mech, args)
     else
       puts "unsupported account: #{c['type']}"
       next

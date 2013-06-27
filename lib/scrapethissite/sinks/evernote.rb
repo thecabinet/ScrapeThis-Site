@@ -2,6 +2,8 @@ require 'digest/md5'
 require 'evernote-thrift'
 
 module ScrapeThisSite
+module Sinks
+
   class Evernote
     def initialize(authToken, evernoteHost='sandbox.evernote.com')
       @authToken = authToken
@@ -78,4 +80,6 @@ module ScrapeThisSite
         return @noteStore.createNotebook(@authToken, sts_notebook).guid
       end
   end
+
+end
 end
