@@ -1,4 +1,4 @@
-#!/usr/bin/ruby -Ilib -w
+#!/usr/bin/ruby -Ilib
 require 'rubygems'
 require 'mechanize'
 require 'scrapethissite'
