@@ -1,11 +1,12 @@
 #!/usr/bin/ruby -Ilib
-require 'rubygems'
 require 'base64'
+require 'optparse'
+require 'yaml'
+
+require 'rubygems'
 require 'highline/import'
 require 'mechanize'
-require 'optparse'
 require 'scrapethissite'
-require 'yaml'
 
 def get_password(options)
   password = options[:password] || nil
