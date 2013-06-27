@@ -4,7 +4,22 @@ require 'mechanize'
 module ScrapeThisSite
 module Sources
 
-  class ThriftSavingsPlan
+  class ThriftSavingsPlan < Source
+    def self.friendly_name
+      return 'Thrift Savings Plan'
+    end
+
+    def self.url
+      return 'https://www.tsp.gov'
+    end
+
+    def self.questions
+      return [
+          ScrapeThisSite::Util::Question.new('username', 'What is your username?'),
+          ScrapeThisSite::Util::Question.new('password', 'What is your password?', true)
+        ]
+    end
+
     def initialize(mech, args)
       @mech = mech
 

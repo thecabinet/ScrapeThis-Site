@@ -4,11 +4,22 @@ require 'evernote-thrift'
 module ScrapeThisSite
 module Sinks
 
-  class Evernote
-    def initialize(authToken, evernoteHost='sandbox.evernote.com')
-      @authToken = authToken
+  class Evernote < Sink
+    def self.url
+      return "http://evernote.com"
+    end
 
-      userStoreUrl = "http://#{evernoteHost}/edam/user"
+    def self.questions
+      return [
+          ScrapeThisSite::Util::Question.new('token', 'What is your developer token?'),
+          ScrapeThisSite::Util::Question.new('host', 'Which Evernote host would you like to use?')
+        ]
+    end
+
+    def initialize(args)
+      @authToken = args['token']
+
+      userStoreUrl = "http://#{args['host']}/edam/user"
       userStoreTransport = Thrift::HTTPClientTransport.new(userStoreUrl)
       userStoreProtocol = Thrift::BinaryProtocol.new(userStoreTransport)
       @userStore = ::Evernote::EDAM::UserStore::UserStore::Client.new(userStoreProtocol)
