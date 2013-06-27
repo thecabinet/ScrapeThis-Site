@@ -3,8 +3,11 @@ require 'rubygems'
 require 'mechanize'
 require 'scrapethissite'
 
-unless ARGV.length == 2
-  STDERR.puts "usage: #{$0} <TSP username> <TSP password>"
+unless ARGV.length == 3
+  STDERR.puts "usage: #{$0} <TSP username> <TSP password> <Evernote Developer Token>"
+  STDERR.puts
+  STDERR.puts "Evernote Developer Tokens are available with no human interaction from:"
+  STDERR.puts "  https://sandbox.evernote.com/api/DeveloperToken.action"
   exit 1
 end
 
@@ -20,13 +23,11 @@ tsp = ScrapeThisSite::ThriftSavingsPlan.new(
           }
         )
 
+evernote = ScrapeThisSite::Evernote.new(ARGV[2])
+
+
 tsp.statements.each { |stmt|
   puts stmt
-
-  scrape = tsp.statement(stmt)
-
-  File.open(scrape.name, 'wb') { |file|
-    file.syswrite(scrape.attachment)
-  }
+  evernote.save( tsp.statement(stmt) )
 }
 
