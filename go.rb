@@ -2,32 +2,54 @@
 require 'rubygems'
 require 'mechanize'
 require 'scrapethissite'
+require 'yaml'
 
-unless ARGV.length == 3
-  STDERR.puts "usage: #{$0} <TSP username> <TSP password> <Evernote Developer Token>"
-  STDERR.puts
-  STDERR.puts "Evernote Developer Tokens are available with no human interaction from:"
-  STDERR.puts "  https://sandbox.evernote.com/api/DeveloperToken.action"
+if ARGV.length > 1
+  STDERR.puts "usage: #{$0} [sts.yaml]"
   exit 1
 end
 
-mech = Mechanize.new { |agent|
-  agent.user_agent_alias = 'Linux Mozilla'
+filename = ARGV[0] || 'sts.yaml'
+config = YAML.load_file(filename)
+
+destinations = []
+config['destinations'].each { |c|
+  case c['type']
+    when 'Evernote'
+      destinations << ScrapeThisSite::Evernote::new(c['token'], c['host'])
+    else
+      puts "unsupported destination: #{c['type']}"
+  end
 }
 
-tsp = ScrapeThisSite::ThriftSavingsPlan.new(
-          mech,
-          {
-            'username' => ARGV[0],
-            'password' => ARGV[1]
-          }
-        )
+config['accounts'].each { |c|
+  mech = Mechanize.new { |agent|
+    agent.user_agent_alias = 'Linux Mozilla'
+  }
 
-evernote = ScrapeThisSite::Evernote.new(ARGV[2])
+  args = c['args'] || {}
+  case c['type']
+    when 'ThriftSavingsPlan'
+      @account = ScrapeThisSite::ThriftSavingsPlan.new(mech, args)
+    else
+      puts "unsupported account: #{c['type']}"
+      next
+  end
 
+  history = c['history'] || []
+  (@account.statements - history).each { |stmt|
+    puts stmt
+    destinations.each { |destination|
+      destination.save( @account.statement(stmt) )
+    }
 
-tsp.statements.each { |stmt|
-  puts stmt
-  evernote.save( tsp.statement(stmt) )
+    history << stmt
+    c['history'] = history
+
+    File.open(".#{filename}", 'w') { |file|
+      file.write( config.to_yaml )
+    }
+    File.rename(".#{filename}", filename)
+  }
 }
 
