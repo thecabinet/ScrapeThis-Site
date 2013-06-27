@@ -1,12 +1,11 @@
 #!/usr/bin/ruby -Ilib
 require 'rubygems'
+require 'base64'
 require 'highline/import'
 require 'mechanize'
 require 'optparse'
 require 'scrapethissite'
 require 'yaml'
-
-SALT = 'ScpTh|St'
 
 def get_password(options)
   password = options[:password] || nil
@@ -21,40 +20,89 @@ def get_password(options)
     end
     password = password1
   else
+    options.merge! YAML.load(File.read(filename))
     begin
       password = options[:password] ||
                  ask("Enter your ScrapeThis|Site password: ") { |q|
                    q.echo = '*'
                  }
       begin
-        decrypter = make_decrypter password
-        yaml = decrypter.update File.read(filename)
-        yaml << decrypter.final
-        config = YAML.load(yaml)
+        options[:password] = password
+        decrypt(options)
       rescue OpenSSL::Cipher::CipherError => e
         puts "  Wrong password!"
         options[:password] = nil
       end
     end while options[:password].nil?
   end
-
-  return options[:password] = password
 end
 
-def make_encrypter(password)
-  encrypter = OpenSSL::Cipher::Cipher.new 'AES-128-CBC'
+def make_key(options)
+  pbkdf2 = options[:encryption][:pbkdf2]
+  if pbkdf2[:digest] == 'SHA1'
+    return OpenSSL::PKCS5.pbkdf2_hmac_sha1(
+               options[:password],
+               Base64.decode64(pbkdf2[:salt]),
+               pbkdf2[:iter],
+               options[:encryption][:alg].split(/-/)[1].to_i
+             )
+  else
+    return OpenSSL::PKCS5.pbkdf2_hmac(
+               options[:password],
+               Base64.decode64(pbkdf2[:salt]),
+               pbkdf2[:iter],
+               options[:encryption][:alg].split(/-/)[1].to_i,
+               pbkdf2[:digest]
+             )
+  end
+end
+
+def encrypt(options)
+  encrypter = OpenSSL::Cipher.new options[:encryption][:alg]
   encrypter.encrypt
-  encrypter.pkcs5_keyivgen password, SALT
+  encrypter.key = make_key options
+  encrypter.random_iv
 
-  return encrypter
+  output = {
+    :encryption => {
+      :alg => options[:encryption][:alg],
+      :iv => nil,
+      :pbkdf2 => {
+        :salt => options[:encryption][:pbkdf2][:salt],
+        :iter => options[:encryption][:pbkdf2][:iter],
+        :digest => options[:encryption][:pbkdf2][:digest]
+      }
+    },
+    :encrypted => nil
+  }
+
+  encrypter = OpenSSL::Cipher.new options[:encryption][:alg]
+  encrypter.encrypt
+  encrypter.key = make_key options
+  output[:encryption][:iv] = Base64.encode64 encrypter.random_iv
+
+  output[:encrypted] = Base64.encode64(
+      encrypter.update(options[:decrypted].to_yaml) + encrypter.final
+    )
+
+  filename = options[:filename]
+  File.open(".#{filename}", 'w') { |file|
+    file.write output.to_yaml
+  }
+  File.rename(".#{filename}", filename)
 end
 
-def make_decrypter(password)
-  decrypter = OpenSSL::Cipher::Cipher.new 'AES-128-CBC'
+def decrypt(options)
+  decrypter = OpenSSL::Cipher.new options[:encryption][:alg]
   decrypter.decrypt
-  decrypter.pkcs5_keyivgen password, SALT
+  decrypter.key = make_key options
+  decrypter.iv = Base64.decode64 options[:encryption][:iv]
 
-  return decrypter
+  options[:decrypted] = YAML.load(
+      decrypter.update(
+        Base64.decode64(options[:encrypted])
+      ) + decrypter.final
+    )
 end
 
 def list(options)
@@ -65,14 +113,10 @@ def list(options)
     exit 1
   end
 
-  password = get_password(options)
-  decrypter = make_decrypter(password)
+  get_password(options)
+  decrypt(options)
 
-  yaml = decrypter.update File.read(options[:filename])
-  yaml << decrypter.final
-  config = YAML.load(yaml)
-
-  pp(config)
+  pp(options[:decrypted])
 
   exit 0
 end
@@ -105,17 +149,15 @@ def add(options)
   clazz = sources[name] || sinks[name]
   die_add(name, sources, sinks) if clazz.nil?
 
-  password = get_password(options)
-  decrypter = make_decrypter(password)
+  get_password(options)
 
   filename = options[:filename]
-  config = if File.size?(filename).nil?
-             {'sources' => [], 'sinks' => []}
-           else
-             yaml = decrypter.update File.read(filename)
-             yaml << decrypter.final
-             YAML.load(yaml)
-           end
+  if File.size?(filename).nil?
+    options[:decrypted] = {'sources' => [], 'sinks' => []}
+  else
+    options.merge! YAML.load(File.read(filename))
+    decrypt(options)
+  end
 
   settings = {}
   service = {
@@ -133,15 +175,10 @@ def add(options)
 
   # FIXME Test credentials before saving them
 
-  config['sources'] << service if clazz.source?
-  config['sinks']   << service if clazz.sink?
+  options[:decrypted]['sources'] << service if clazz.source?
+  options[:decrypted]['sinks']   << service if clazz.sink?
 
-  encrypter = make_encrypter(password)
-  File.open(".#{filename}", 'w') { |file|
-    file.write(encrypter.update(config.to_yaml))
-    file.write(encrypter.final)
-  }
-  File.rename(".#{filename}", filename)
+  encrypt(options)
 
   exit 0
 end
@@ -153,14 +190,11 @@ def run(options)
     exit 1
   end
 
-  password = get_password(options)
-  decrypter = make_decrypter(password)
-  yaml = decrypter.update File.read(filename)
-  yaml << decrypter.final
-  config = YAML.load(yaml)
+  get_password(options)
+  decrypt(options)
 
   sinks = []
-  config['sinks'].each { |c|
+  options[:decrypted]['sinks'].each { |c|
     clazz = c['class'].sub(/.*:/, '')
     begin
       sinks << ScrapeThisSite::Sinks.const_get(clazz).new(c['settings'])
@@ -170,8 +204,7 @@ def run(options)
     end
   }
 
-  encrypter = make_encrypter(password)
-  config['sources'].each { |c|
+  options[:decrypted]['sources'].each { |c|
     mech = Mechanize.new { |agent|
       agent.user_agent_alias = 'Linux Mozilla'
     }
@@ -196,18 +229,22 @@ def run(options)
       history << stmt
       c['history'] = history
 
-      encrypter.reset
-      File.open(".#{filename}", 'w') { |file|
-        file.write(encrypter.update(config.to_yaml))
-        file.write(encrypter.final)
-      }
-      File.rename(".#{filename}", filename)
+      encrypt(options)
     }
   }
 end
 
 options = {
-  :filename => 'sts.cf'
+  :filename => 'sts.cf',
+  :encryption => {
+    :alg => 'AES-256-CBC',
+    :iv => nil,
+    :pbkdf2 => {
+      :salt => Base64.encode64(Random.new.bytes(8)),
+      :iter => 5000,
+      :digest => 'SHA1'
+    }
+  }
 }
 opts = OptionParser.new { |opts|
   opts.banner = "usage: #{$0} [options]"
